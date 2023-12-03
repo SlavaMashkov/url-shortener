@@ -29,12 +29,12 @@ func New(storagePath string) (*Storage, error) {
 		CREATE INDEX IF NOT EXISTS idx_alias ON url(alias);
 	`)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", fn, err)
+		return nil, fmt.Errorf("%s: prepare statement: %w", fn, err)
 	}
 
 	_, err = statement.Exec()
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", fn, err)
+		return nil, fmt.Errorf("%s: execute statement: %w", fn, err)
 	}
 
 	return &Storage{db: db}, nil
@@ -45,14 +45,14 @@ func (s *Storage) SaveURL(urlToSave string, alias string) (int64, error) {
 
 	statement, err := s.db.Prepare("INSERT INTO url (url, alias) VALUES (?, ?)")
 	if err != nil {
-		return 0, fmt.Errorf("%s: %w", fn, err)
+		return 0, fmt.Errorf("%s: prepare statement: %w", fn, err)
 	}
 
 	result, err := statement.Exec(urlToSave, alias)
 	if err != nil {
 		var sqliteErr sqlite3.Error
 		if errors.As(err, &sqliteErr) && sqliteErr.ExtendedCode == sqlite3.ErrConstraintUnique {
-			return 0, fmt.Errorf("%s: %w", fn, storage.ErrURLExists)
+			return 0, fmt.Errorf("%s: execute statement: %w", fn, storage.ErrURLExists)
 		}
 
 		return 0, fmt.Errorf("%s: %w", fn, err)
@@ -64,4 +64,43 @@ func (s *Storage) SaveURL(urlToSave string, alias string) (int64, error) {
 	}
 
 	return id, nil
+}
+
+func (s *Storage) GetURLByAlias(alias string) (string, error) {
+	const fn = "storage.sqlite.GetURLByAlias"
+
+	statement, err := s.db.Prepare("SELECT url FROM url WHERE alias = ?")
+	if err != nil {
+		return "", fmt.Errorf("%s: prepare statement: %w", fn, err)
+	}
+
+	var url string
+
+	err = statement.QueryRow(alias).Scan(&url)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", storage.ErrURLNotFound
+		}
+
+		return "", fmt.Errorf("%s: execute statement: %w", fn, err)
+	}
+
+	return url, nil
+}
+
+func (s *Storage) DeleteURLByAlias(alias string) (int64, error) {
+	const fn = "storage.sqlite.DeleteURLByAlias"
+
+	statement, err := s.db.Prepare("DELETE FROM url WHERE alias = ?")
+	if err != nil {
+		return 0, fmt.Errorf("%s: prepare statement: %w", fn, err)
+	}
+
+	result, err := statement.Exec(alias)
+	if err != nil {
+		return 0, fmt.Errorf("%s: execute statement: %w", fn, err)
+	}
+
+	return result.RowsAffected()
 }
