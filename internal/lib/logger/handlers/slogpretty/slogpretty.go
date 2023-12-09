@@ -69,13 +69,25 @@ func (h *PrettyHandler) Handle(_ context.Context, r slog.Record) error {
 	}
 
 	timeStr := r.Time.Format("[15:05:05.000]")
-	msg := color.WhiteString(r.Message)
+
+	msg := r.Message
+
+	switch r.Level {
+	case slog.LevelDebug:
+		msg = color.GreenString(msg)
+	case slog.LevelInfo:
+		msg = color.GreenString(msg)
+	case slog.LevelWarn:
+		msg = color.YellowString(msg)
+	case slog.LevelError:
+		msg = color.RedString(msg)
+	}
 
 	h.l.Println(
 		timeStr,
 		level,
 		msg,
-		color.HiWhiteString(string(b)),
+		color.WhiteString(string(b)),
 	)
 
 	return nil
