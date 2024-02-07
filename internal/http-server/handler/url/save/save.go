@@ -27,6 +27,7 @@ type Response struct {
 //go:generate go run github.com/vektra/mockery/v2@v2.40.1 --name=URLSaver
 type URLSaver interface {
 	SaveURL(urlToSave string, alias string) (int64, error)
+	IsAliasExists(alias string) (bool, error)
 }
 
 // TODO: move to config
@@ -65,10 +66,38 @@ func New(log *slog.Logger, urlSaver URLSaver) http.HandlerFunc {
 			return
 		}
 
-		// TODO: handle case when generated alias already saved in db
 		alias := req.Alias
 		if alias == "" {
-			alias = random.NewRandomString(aliasLength)
+			for {
+				alias = random.NewRandomString(aliasLength)
+				aliasExists, err := urlSaver.IsAliasExists(alias)
+				if err != nil {
+					log.Error("failed to check alias", sl.Err(err))
+
+					render.JSON(w, r, response.Error("failed to check alias"))
+
+					return
+				}
+				if !aliasExists {
+					break
+				}
+			}
+		} else {
+			aliasExists, err := urlSaver.IsAliasExists(alias)
+			if err != nil {
+				log.Error("failed to check alias", sl.Err(err))
+
+				render.JSON(w, r, response.Error("failed to check alias"))
+
+				return
+			}
+			if aliasExists {
+				log.Info("alias already exists")
+
+				render.JSON(w, r, response.Error("alias already exists"))
+
+				return
+			}
 		}
 
 		id, err := urlSaver.SaveURL(req.URL, alias)

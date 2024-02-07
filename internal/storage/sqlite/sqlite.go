@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/mattn/go-sqlite3"
+	"log/slog"
 	"url-shortener/internal/storage"
 )
 
@@ -24,7 +25,7 @@ func New(storagePath string) (*Storage, error) {
 		CREATE TABLE IF NOT EXISTS url (
 			id INTEGER PRIMARY KEY,
 			alias TEXT NOT NULL UNIQUE,
-			url TEXT NOT NULL
+			url TEXT NOT NULL UNIQUE
 		);
 		CREATE INDEX IF NOT EXISTS idx_alias ON url(alias);
 	`)
@@ -51,7 +52,7 @@ func (s *Storage) SaveURL(urlToSave string, alias string) (int64, error) {
 	result, err := statement.Exec(urlToSave, alias)
 	if err != nil {
 		var sqliteErr sqlite3.Error
-		if errors.As(err, &sqliteErr) && sqliteErr.ExtendedCode == sqlite3.ErrConstraintUnique {
+		if errors.As(err, &sqliteErr) && errors.Is(sqliteErr.ExtendedCode, sqlite3.ErrConstraintUnique) {
 			return 0, fmt.Errorf("%s: execute statement: %w", fn, storage.ErrURLExists)
 		}
 
@@ -103,4 +104,25 @@ func (s *Storage) DeleteURLByAlias(alias string) (int64, error) {
 	}
 
 	return result.RowsAffected()
+}
+
+func (s *Storage) IsAliasExists(alias string) (bool, error) {
+	const fn = "storage.sqlite.IsAliasExist"
+
+	url, err := s.GetURLByAlias(alias)
+	if err != nil {
+		slog.Info(fn, err)
+
+		if errors.Is(err, storage.ErrURLNotFound) {
+			return false, nil
+		}
+
+		return true, fmt.Errorf("%s: %w", fn, err)
+	}
+
+	if url != "" {
+		return true, nil
+	}
+
+	return false, nil
 }
