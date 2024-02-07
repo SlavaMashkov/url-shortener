@@ -103,7 +103,16 @@ func (s *Storage) DeleteURLByAlias(alias string) (int64, error) {
 		return 0, fmt.Errorf("%s: execute statement: %w", fn, err)
 	}
 
-	return result.RowsAffected()
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("%s: rows affected: %w", fn, err)
+	}
+
+	if rowsAffected == 0 {
+		return 0, storage.ErrURLNotFound
+	}
+
+	return rowsAffected, nil
 }
 
 func (s *Storage) IsAliasExists(alias string) (bool, error) {
